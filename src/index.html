@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mac Soundboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Drag and drop zone overlay -->
+  <div id="drop-overlay" class="drop-overlay hidden">
+    <div class="drop-box">
+      <div class="drop-icon">📂</div>
+      <h3>Drop Audio or Soundboard Pack Here</h3>
+      <p>Supports MP3, WAV, OGG, M4A &amp; .soundboard packs</p>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- Main App Layout -->
+  <div class="app-container">
+    <!-- Top macOS Header & Drag Region -->
+    <header class="mac-header">
+      <div class="titlebar-drag-region">
+        <div class="app-brand">
+          <div class="brand-logo">
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+          </div>
+          <span class="app-title">Mac Soundboard</span>
+          <span class="badge-bg">Background Active</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs (My Sounds vs Discover Library) -->
+      <nav class="nav-switcher">
+        <button id="nav-my-sounds" class="nav-tab active">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+          <span>My Soundboard</span>
+        </button>
+        <button id="nav-discover" class="nav-tab">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+          </svg>
+          <span>Discover Presets</span>
+          <span class="pill-new">12+</span>
+        </button>
+      </nav>
+
+      <div class="header-actions">
+        <button id="btn-import-pack" class="btn-icon" title="Import a .soundboard pack">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Import Pack</span>
+        </button>
+        <button id="btn-export-pack" class="btn-icon" title="Export all sounds into a shareable .soundboard file">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <span>Share Pack</span>
+        </button>
+        <button id="btn-minimize-tray" class="btn-icon" title="Minimize to Menu Bar (Runs in Background)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 14h6m-6 4h16M4 10h16M4 6h16" />
+          </svg>
+          <span>Hide</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Controls Bar -->
+    <div class="controls-bar">
+      <div class="search-box">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="search-input" placeholder="Search sounds..." />
+      </div>
+
+      <div class="master-controls">
+        <div class="volume-group">
+          <button id="btn-mute" class="btn-icon-subtle" title="Mute all">
+            <svg id="icon-volume" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+            </svg>
+          </button>
+          <input type="range" id="master-volume" min="0" max="1" step="0.01" value="1" title="Master Volume" />
+          <span id="master-volume-label">100%</span>
+        </div>
+
+        <button id="btn-panic" class="btn-panic" title="Stop all playing audio (Global shortcut)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"></rect>
+          </svg>
+          <span>Stop All</span>
+          <kbd id="panic-shortcut-badge">⌥0</kbd>
+        </button>
+
+        <button id="btn-open-upload" class="btn-primary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Upload Sound</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Category Filter Tabs -->
+    <div class="category-tabs" id="category-tabs">
+      <button class="tab-btn active" data-cat="all">All</button>
+      <button class="tab-btn" data-cat="Memes">Memes</button>
+      <button class="tab-btn" data-cat="Games">Games</button>
+      <button class="tab-btn" data-cat="Reactions">Reactions</button>
+      <button class="tab-btn" data-cat="Sound Effects">Sound Effects</button>
+      <button class="tab-btn" data-cat="Music">Music</button>
+      <button class="tab-btn" data-cat="Custom">Custom</button>
+    </div>
+
+    <!-- VIEW 1: My Sounds View -->
+    <main id="view-my-sounds" class="soundboard-scroll-area">
+      <div id="sound-grid" class="sound-grid">
+        <!-- Dynamically populated sound cards -->
+      </div>
+      
+      <div id="empty-state" class="empty-state hidden">
+        <div class="empty-icon">🎵</div>
+        <h3>No sounds found</h3>
+        <p>Click "Upload Sound" or check "Discover Presets" to add sounds</p>
+      </div>
+    </main>
+
+    <!-- VIEW 2: Discover Library View -->
+    <main id="view-discover" class="soundboard-scroll-area hidden">
+      <div class="discover-banner">
+        <h2>🔥 MyInstants Preset Library</h2>
+        <p>Browse iconic meme and sound effect buttons. Listen to the preview and click <strong>"+ Add"</strong> to install it directly to your soundboard with a shortcut!</p>
+      </div>
+      <div id="preset-grid" class="preset-grid">
+        <!-- Dynamically populated preset cards -->
+      </div>
+    </main>
+
+    <!-- Status Bar / Footer -->
+    <footer class="app-footer">
+      <div class="footer-hint">
+        <span class="indicator-dot"></span>
+        <span>Global shortcuts active from anywhere on macOS</span>
+      </div>
+      <div class="footer-stats">
+        <span id="sound-count">8 sounds</span>
+        <span>•</span>
+        <span>Stop shortcut: <kbd>⌥0</kbd></span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- UPLOAD MODAL (MyInstants Style) -->
+  <div id="upload-modal" class="modal-backdrop hidden">
+    <div class="modal-card upload-modal-card">
+      <div class="modal-header">
+        <h3>Upload New Sound</h3>
+        <button id="upload-modal-close" class="btn-close">×</button>
+      </div>
+      <div class="modal-body">
+        <!-- File Picker / Drop Zone -->
+        <div class="form-group">
+          <label class="form-label">Sound Audio File (MP3, WAV, M4A, OGG)</label>
+          <div id="upload-file-dropzone" class="upload-dropzone">
+            <div id="file-unselected-view">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <span>Click to select audio file or drag it here</span>
+            </div>
+            <div id="file-selected-view" class="file-selected-info hidden">
+              <span id="upload-file-name" class="selected-filename">audio.mp3</span>
+              <button id="upload-preview-btn" class="btn-preview" title="Preview audio">
+                ▶ Preview
+              </button>
+              <button id="upload-change-file-btn" class="btn-change">Change</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sound Title & Category -->
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label">Sound Title</label>
+            <input type="text" id="upload-title-input" class="form-input" placeholder="e.g. Vine Boom" />
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label">Category</label>
+            <select id="upload-category-select" class="form-select">
+              <option value="Memes">Memes</option>
+              <option value="Games">Games</option>
+              <option value="Reactions">Reactions</option>
+              <option value="Sound Effects">Sound Effects</option>
+              <option value="Music">Music</option>
+              <option value="Custom" selected>Custom</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- MyInstants Color Palette Picker -->
+        <div class="form-group">
+          <label class="form-label">Button Color</label>
+          <div class="color-palette" id="color-palette">
+            <button type="button" class="color-chip active" data-color="#ef4444" style="--c: #ef4444" title="Crimson"></button>
+            <button type="button" class="color-chip" data-color="#f97316" style="--c: #f97316" title="Neon Orange"></button>
+            <button type="button" class="color-chip" data-color="#f59e0b" style="--c: #f59e0b" title="Amber"></button>
+            <button type="button" class="color-chip" data-color="#eab308" style="--c: #eab308" title="Yellow"></button>
+            <button type="button" class="color-chip" data-color="#10b981" style="--c: #10b981" title="Emerald"></button>
+            <button type="button" class="color-chip" data-color="#14b8a6" style="--c: #14b8a6" title="Teal"></button>
+            <button type="button" class="color-chip" data-color="#06b6d4" style="--c: #06b6d4" title="Cyan"></button>
+            <button type="button" class="color-chip" data-color="#3b82f6" style="--c: #3b82f6" title="Electric Blue"></button>
+            <button type="button" class="color-chip" data-color="#6366f1" style="--c: #6366f1" title="Indigo"></button>
+            <button type="button" class="color-chip" data-color="#8b5cf6" style="--c: #8b5cf6" title="Violet"></button>
+            <button type="button" class="color-chip" data-color="#ec4899" style="--c: #ec4899" title="Hot Pink"></button>
+            <button type="button" class="color-chip" data-color="#64748b" style="--c: #64748b" title="Slate"></button>
+          </div>
+        </div>
+
+        <!-- Optional Shortcut Field -->
+        <div class="form-group">
+          <label class="form-label">Global Shortcut (Optional)</label>
+          <div id="upload-shortcut-box" class="shortcut-record-box">
+            <span id="upload-shortcut-text">Click to set key combo (e.g. ⌥9)...</span>
+            <button id="upload-clear-shortcut" class="btn-clear-sc hidden" title="Clear">×</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="upload-cancel-btn" class="btn-secondary">Cancel</button>
+        <button id="upload-submit-btn" class="btn-primary" disabled>Add to Soundboard</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KEY RECORDING MODAL (For existing cards) -->
+  <div id="key-record-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-sound-title">Assign Shortcut</h3>
+        <button id="modal-close-btn" class="btn-close">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Press any key combination on your keyboard (e.g. <kbd>⌥</kbd>+<kbd>1</kbd> or <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>A</kbd>):</p>
+        <div id="key-display-box" class="key-display-box active-listening">
+          <span id="key-display-text">Listening for keystroke...</span>
+        </div>
+        <p class="modal-tip">Tip: Use combinations like <code>Option + [key]</code> or <code>Ctrl + Shift + [key]</code> to avoid conflicting with everyday Mac shortcuts.</p>
+        <div id="key-error-msg" class="key-error hidden"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="modal-clear-btn" class="btn-secondary">Remove Shortcut</button>
+        <button id="modal-save-btn" class="btn-primary" disabled>Save Shortcut</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

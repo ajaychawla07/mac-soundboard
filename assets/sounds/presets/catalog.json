@@ -1,0 +1,86 @@
+[
+  {
+    "id": "preset_vine-boom",
+    "name": "Vine Boom",
+    "category": "Memes",
+    "filename": "vine-boom.wav",
+    "color": "#dc2626"
+  },
+  {
+    "id": "preset_metal-pipe",
+    "name": "Metal Pipe Falling",
+    "category": "Memes",
+    "filename": "metal-pipe.wav",
+    "color": "#eab308"
+  },
+  {
+    "id": "preset_ka-ching",
+    "name": "Cash Register (Ka-Ching)",
+    "category": "Sound Effects",
+    "filename": "ka-ching.wav",
+    "color": "#10b981"
+  },
+  {
+    "id": "preset_emotional-damage",
+    "name": "Emotional Damage",
+    "category": "Memes",
+    "filename": "emotional-damage.wav",
+    "color": "#f97316"
+  },
+  {
+    "id": "preset_dun-dun-dun",
+    "name": "Dun Dun Dun (Dramatic)",
+    "category": "Reactions",
+    "filename": "dun-dun-dun.wav",
+    "color": "#8b5cf6"
+  },
+  {
+    "id": "preset_boing",
+    "name": "Cartoon Boing",
+    "category": "Sound Effects",
+    "filename": "boing.wav",
+    "color": "#ec4899"
+  },
+  {
+    "id": "preset_sad-violin",
+    "name": "Sad Violin",
+    "category": "Music",
+    "filename": "sad-violin.wav",
+    "color": "#06b6d4"
+  },
+  {
+    "id": "preset_level-up",
+    "name": "Level Up",
+    "category": "Games",
+    "filename": "level-up.wav",
+    "color": "#3b82f6"
+  },
+  {
+    "id": "preset_record-scratch",
+    "name": "Record Scratch",
+    "category": "Sound Effects",
+    "filename": "record-scratch.wav",
+    "color": "#64748b"
+  },
+  {
+    "id": "preset_gavel",
+    "name": "Judge Gavel Slam",
+    "category": "Sound Effects",
+    "filename": "gavel.wav",
+    "color": "#78716c"
+  },
+  {
+    "id": "preset_whistle",
+    "name": "Referee Whistle",
+    "category": "Sound Effects",
+    "filename": "whistle.wav",
+    "color": "#14b8a6"
+  },
+  {
+    "id": "preset_oof",
+    "name": "Classic Oof",
+    "category": "Games",
+    "filename": "oof.wav",
+    "color": "#f43f5e"
+  }
+]

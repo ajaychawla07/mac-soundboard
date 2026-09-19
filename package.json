@@ -1,0 +1,47 @@
+{
+  "name": "mac-soundboard",
+  "version": "1.0.0",
+  "description": "Mac background soundboard app with global shortcuts",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test.js",
+    "build:app": "electron-builder --mac dir",
+    "dist": "electron-builder --mac dmg zip"
+  },
+  "build": {
+    "appId": "com.soundboard.mac",
+    "productName": "Mac Soundboard",
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "icon": "assets/icons/icon.icns",
+      "category": "public.app-category.entertainment",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "identity": null
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "assets/**/*"
+    ]
+  },
+  "keywords": [
+    "soundboard",
+    "electron",
+    "mac",
+    "shortcuts",
+    "audio"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^44.4.3",
+    "electron-builder": "^26.0.12"
+  }
+}
