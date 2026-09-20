@@ -6,6 +6,7 @@
   "scripts": {
     "start": "electron .",
     "test": "node test.js",
+    "publish-preset": "node scripts/publish-presets.js",
     "build:app": "electron-builder --mac dir",
     "dist": "electron-builder --mac dmg zip"
   },
