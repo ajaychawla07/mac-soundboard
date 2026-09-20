@@ -448,7 +448,8 @@ body {
 }
 
 .instant-button-wrap:active .instant-button-3d,
-.sound-card.is-playing .instant-button-3d {
+.sound-card.is-playing .instant-button-3d,
+.preset-card.is-playing .instant-button-3d {
   transform: translateY(5px);
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.6),
@@ -465,11 +466,13 @@ body {
   height: 22px;
 }
 
-.sound-card.is-playing .instant-button-3d svg {
+.sound-card.is-playing .instant-button-3d svg,
+.preset-card.is-playing .instant-button-3d svg {
   display: none;
 }
 
-.sound-card.is-playing .equalizer-wave {
+.sound-card.is-playing .equalizer-wave,
+.preset-card.is-playing .equalizer-wave {
   display: flex;
 }
 

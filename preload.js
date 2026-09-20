@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('soundboard', {
   // Audio playback controls
   playSound: (soundId) => ipcRenderer.invoke('play-sound', soundId),
   previewSound: (soundPath) => ipcRenderer.invoke('preview-sound', soundPath),
+  getSoundDataUrl: (target) => ipcRenderer.invoke('get-sound-data-url', target),
   stopAllSounds: () => ipcRenderer.invoke('stop-all-sounds'),
 
   // Shortcuts

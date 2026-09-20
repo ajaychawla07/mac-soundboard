@@ -1,6 +1,6 @@
 {
   "name": "mac-soundboard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Mac background soundboard app with global shortcuts",
   "main": "main.js",
   "scripts": {
@@ -29,6 +29,9 @@
       "main.js",
       "preload.js",
       "src/**/*",
+      "assets/**/*"
+    ],
+    "asarUnpack": [
       "assets/**/*"
     ]
   },

@@ -62,17 +62,17 @@ function run() {
   let filesToProcess = process.argv.slice(2);
 
   if (filesToProcess.length === 0) {
-    // If no args passed, auto-detect recently downloaded audio files in ~/Downloads
-    const downloadsDir = path.join(os.homedir(), 'Downloads');
-    if (fs.existsSync(downloadsDir)) {
-      const allFiles = fs.readdirSync(downloadsDir);
+    // If no args passed, auto-detect recently downloaded audio files in ~/Downloads/sounds
+    const soundsDir = path.join(os.homedir(), 'Downloads', 'sounds');
+    if (fs.existsSync(soundsDir)) {
+      const allFiles = fs.readdirSync(soundsDir);
       const audioExts = ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac'];
       const now = Date.now();
-      
+
       const recentAudio = allFiles
         .filter(f => audioExts.includes(path.extname(f).toLowerCase()))
         .map(f => {
-          const fullPath = path.join(downloadsDir, f);
+          const fullPath = path.join(soundsDir, f);
           const stat = fs.statSync(fullPath);
           return { name: f, fullPath, mtime: stat.mtimeMs };
         })
@@ -85,7 +85,7 @@ function run() {
   }
 
   if (filesToProcess.length === 0) {
-    console.log('No audio files specified or found in Downloads.');
+    console.log('No audio files specified or found in ~/Downloads/sounds.');
     console.log('Usage: npm run publish-preset <path-to-sound-1.mp3> <path-to-sound-2.wav>');
     process.exit(1);
   }
@@ -107,7 +107,7 @@ function run() {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
-    
+
     const targetFilename = `${cleanBasename}${ext}`;
     const targetDest = path.join(PRESETS_DIR, targetFilename);
 
@@ -152,7 +152,7 @@ function run() {
     const commitMsg = addedSounds.length === 1
       ? `feat(presets): add ${addedSounds[0]} sound effect`
       : `feat(presets): add ${addedSounds.length} new sounds (${addedSounds.slice(0, 3).join(', ')}${addedSounds.length > 3 ? '...' : ''})`;
-    
+
     execSync(`git commit -m "${commitMsg}"`, { stdio: 'inherit' });
     execSync('git push origin main', { stdio: 'inherit' });
     console.log('\n🚀 SUCCESS! All new sounds are now live on GitHub and available in everyone\'s app!');

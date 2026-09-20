@@ -98,6 +98,105 @@ function showToast(message) {
   }, 3200);
 }
 
+// Audio Preview Controller (Instant HTML5 Web Audio with tactile animations)
+let currentPreviewAudio = null;
+let currentPreviewId = null;
+
+function stopCurrentPreview() {
+  if (currentPreviewAudio) {
+    try {
+      currentPreviewAudio.pause();
+      currentPreviewAudio.currentTime = 0;
+    } catch (_) {}
+    currentPreviewAudio = null;
+  }
+  if (currentPreviewId) {
+    const id = currentPreviewId;
+    currentPreviewId = null;
+    decrementPlayingState(id);
+  }
+}
+
+async function playPresetPreview(preset) {
+  if (!preset) return;
+
+  // Toggle stop if clicking the currently playing preset
+  if (currentPreviewId === preset.id && currentPreviewAudio && !currentPreviewAudio.paused) {
+    stopCurrentPreview();
+    return;
+  }
+
+  // Stop any other currently running preview
+  stopCurrentPreview();
+
+  // 1. Try to obtain dataUrl or audioUrl via IPC
+  let audioSrc = null;
+  try {
+    const res = await window.soundboard.getSoundDataUrl(preset.id || preset.filename || preset.path);
+    if (res && res.success) {
+      audioSrc = res.dataUrl || res.audioUrl;
+    }
+  } catch (err) {
+    console.warn('getSoundDataUrl IPC error:', err);
+  }
+
+  // 2. Direct fallback URL candidates
+  if (!audioSrc) {
+    if (preset.audioUrl) {
+      audioSrc = preset.audioUrl;
+    } else if (preset.filename) {
+      audioSrc = `../assets/sounds/presets/${encodeURIComponent(preset.filename)}`;
+    }
+  }
+
+  // 3. Play via HTML5 Audio with animation & lifecycle
+  if (audioSrc) {
+    try {
+      const audio = new Audio(audioSrc);
+      currentPreviewAudio = audio;
+      currentPreviewId = preset.id;
+
+      const masterVol = appConfig.masterVolume !== undefined ? appConfig.masterVolume : 1.0;
+      audio.volume = Math.max(0, Math.min(1.0, masterVol * 0.85));
+
+      audio.onplay = () => {
+        incrementPlayingState(preset.id);
+      };
+
+      audio.onended = () => {
+        if (currentPreviewAudio === audio) {
+          currentPreviewAudio = null;
+          currentPreviewId = null;
+        }
+        decrementPlayingState(preset.id);
+      };
+
+      audio.onerror = async (err) => {
+        console.warn('HTML5 audio error on preset preview, falling back to native CoreAudio:', err);
+        stopCurrentPreview();
+        await window.soundboard.previewSound(preset.id || preset.filename || preset.path);
+      };
+
+      await audio.play();
+      return;
+    } catch (playErr) {
+      console.warn('HTML5 audio play exception, falling back to native CoreAudio:', playErr);
+      stopCurrentPreview();
+    }
+  }
+
+  // 4. Native CoreAudio fallback in main process
+  try {
+    const ok = await window.soundboard.previewSound(preset.id || preset.filename || preset.path);
+    if (!ok) {
+      showToast('Could not play preset sound');
+    }
+  } catch (err) {
+    console.error('Preset preview error:', err);
+    showToast('Could not play preset sound');
+  }
+}
+
 // Play sound by ID via native macOS CoreAudio engine
 async function playSound(soundId) {
   await window.soundboard.playSound(soundId);
@@ -105,6 +204,7 @@ async function playSound(soundId) {
 
 // Stop all playing audio
 async function stopAllSounds() {
+  stopCurrentPreview();
   await window.soundboard.stopAllSounds();
   playingCards.clear();
   document.querySelectorAll('.sound-card.is-playing, .preset-card.is-playing').forEach(el => {
@@ -254,7 +354,7 @@ function renderPresets() {
           </div>
         </div>
 
-        <div class="preset-card-meta">
+        <div class="preset-card-meta" data-action="preview-preset" data-id="${preset.id}" data-path="${escapeHtml(previewSrc)}" style="cursor: pointer;" title="Click to Preview">
           <span class="preset-title">${escapeHtml(preset.name)}</span>
           <div style="display: flex; align-items: center; justify-content: center; gap: 5px; margin-top: 2px;">
             <span class="preset-category">${escapeHtml(preset.category)}</span>
@@ -345,25 +445,42 @@ soundGrid.addEventListener('input', (e) => {
 
 // Event Delegation for Presets Grid
 presetGrid.addEventListener('click', async (e) => {
-  const previewTarget = e.target.closest('[data-action="preview-preset"]');
+  const previewTarget = e.target.closest('[data-action="preview-preset"], [data-action="play"]');
   if (previewTarget) {
-    const path = previewTarget.getAttribute('data-path');
     const id = previewTarget.getAttribute('data-id');
-    incrementPlayingState(id);
-    await window.soundboard.previewSound(path);
-    setTimeout(() => decrementPlayingState(id), 1200);
+    const path = previewTarget.getAttribute('data-path');
+    const preset = presetsCatalog.find(p => p.id === id) || {
+      id,
+      path,
+      filename: id ? id.replace(/^preset_/, '') + '.wav' : 'preview.wav'
+    };
+    await playPresetPreview(preset);
     return;
   }
 
   const installTarget = e.target.closest('[data-action="install-preset"]');
-  if (installTarget) {
+  if (installTarget && !installTarget.disabled) {
     const id = installTarget.getAttribute('data-id');
-    const newSound = await window.soundboard.installPreset({ presetId: id });
-    if (newSound) {
-      appConfig = await window.soundboard.loadConfig();
-      renderSounds();
-      renderPresets();
-      showToast(`Added "${newSound.name}" to your Soundboard! 🎉`);
+    const origText = installTarget.textContent;
+    installTarget.disabled = true;
+    installTarget.textContent = 'Adding...';
+
+    try {
+      const res = await window.soundboard.installPreset({ presetId: id });
+      if (res && res.success) {
+        appConfig = await window.soundboard.loadConfig();
+        renderSounds();
+        renderPresets();
+        showToast(`Added "${res.sound?.name || 'sound'}" to your Soundboard! 🎉`);
+      } else {
+        installTarget.disabled = false;
+        installTarget.textContent = origText;
+        showToast(`Failed to add: ${res?.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      installTarget.disabled = false;
+      installTarget.textContent = origText;
+      showToast(`Error adding preset: ${err.message}`);
     }
     return;
   }
@@ -380,6 +497,7 @@ async function deleteSound(soundId) {
   }
   appConfig.sounds.splice(idx, 1);
   renderSounds();
+  renderPresets();
   await window.soundboard.saveConfig(appConfig);
   showToast(`Deleted "${sound.name}"`);
 }
@@ -458,6 +576,18 @@ uploadChangeFileBtn.addEventListener('click', (e) => {
 uploadPreviewBtn.addEventListener('click', async (e) => {
   e.stopPropagation();
   if (uploadSelectedFilePath) {
+    try {
+      const res = await window.soundboard.getSoundDataUrl(uploadSelectedFilePath);
+      if (res && res.success && res.dataUrl) {
+        stopCurrentPreview();
+        const a = new Audio(res.dataUrl);
+        currentPreviewAudio = a;
+        a.volume = (appConfig.masterVolume !== undefined ? appConfig.masterVolume : 1.0) * 0.85;
+        a.onended = () => { if (currentPreviewAudio === a) currentPreviewAudio = null; };
+        await a.play();
+        return;
+      }
+    } catch (_) {}
     await window.soundboard.previewSound(uploadSelectedFilePath);
   }
 });
@@ -705,6 +835,9 @@ modalSaveBtn.addEventListener('click', async () => {
 masterVolumeSlider.addEventListener('input', (e) => {
   const val = parseFloat(e.target.value);
   appConfig.masterVolume = val;
+  if (currentPreviewAudio) {
+    currentPreviewAudio.volume = Math.max(0, Math.min(1.0, val * 0.85));
+  }
   masterVolumeLabel.textContent = `${Math.round(val * 100)}%`;
   isMuted = val === 0;
   updateVolumeIcon();
@@ -724,6 +857,9 @@ btnMute.addEventListener('click', () => {
     masterVolumeSlider.value = 0;
     masterVolumeLabel.textContent = '0%';
     appConfig.masterVolume = 0;
+  }
+  if (currentPreviewAudio) {
+    currentPreviewAudio.volume = Math.max(0, Math.min(1.0, appConfig.masterVolume * 0.85));
   }
   updateVolumeIcon();
   saveConfigDebounced();
@@ -841,6 +977,9 @@ dropOverlay.addEventListener('drop', async (e) => {
 
 // Global Listeners from Main Process
 window.soundboard.onSoundStatus(({ soundId, status }) => {
+  if (currentPreviewId === soundId && currentPreviewAudio) {
+    return;
+  }
   if (status === 'playing') {
     incrementPlayingState(soundId);
   } else if (status === 'ended') {
@@ -849,6 +988,7 @@ window.soundboard.onSoundStatus(({ soundId, status }) => {
 });
 
 window.soundboard.onStopAll(() => {
+  stopCurrentPreview();
   playingCards.clear();
   document.querySelectorAll('.sound-card.is-playing, .preset-card.is-playing').forEach(el => {
     el.classList.remove('is-playing');

@@ -3,10 +3,13 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const rootDir = path.join(__dirname, '..');
-const appDir = path.join(rootDir, 'dist', 'mac-arm64', 'Mac Soundboard.app', 'Contents', 'Resources');
+const resourceDirs = [
+  path.join(rootDir, 'dist', 'Mac Soundboard.app', 'Contents', 'Resources'),
+  path.join(rootDir, 'dist', 'mac-arm64', 'Mac Soundboard.app', 'Contents', 'Resources')
+].filter(d => fs.existsSync(d));
 
-if (!fs.existsSync(appDir)) {
-  console.log('App bundle Resources not found, skipping asar update.');
+if (resourceDirs.length === 0) {
+  console.log('No app bundle Resources found, skipping asar update.');
   process.exit(0);
 }
 
@@ -21,9 +24,11 @@ fs.copyFileSync(path.join(rootDir, 'preload.js'), path.join(stagingDir, 'preload
 fs.cpSync(path.join(rootDir, 'src'), path.join(stagingDir, 'src'), { recursive: true });
 fs.cpSync(path.join(rootDir, 'assets'), path.join(stagingDir, 'assets'), { recursive: true });
 
-const targetAsar = path.join(appDir, 'app.asar');
-console.log('Packing app into asar...');
-execSync(`npx asar pack "${stagingDir}" "${targetAsar}" --unpack "assets/sounds/**/*"`, { cwd: rootDir });
+for (const resDir of resourceDirs) {
+  const targetAsar = path.join(resDir, 'app.asar');
+  console.log(`Packing app into ${targetAsar}...`);
+  execSync(`npx asar pack "${stagingDir}" "${targetAsar}" --unpack "**/assets/sounds/**"`, { cwd: rootDir });
+}
 
 // Clean staging
 fs.rmSync(stagingDir, { recursive: true, force: true });

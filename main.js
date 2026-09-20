@@ -2,8 +2,10 @@ const { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, dialog, protoco
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const https = require('https');
 const { spawn, execFile } = require('child_process');
+const { pathToFileURL } = require('url');
 
 // Allow audio autoplay without user gesture requirements in background
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -38,6 +40,15 @@ function fetchJsonFromUrl(url) {
 
 function downloadFileFromUrl(url, destPath) {
   return new Promise((resolve, reject) => {
+    try {
+      const dir = path.dirname(destPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    } catch (dirErr) {
+      return reject(dirErr);
+    }
+
     const req = https.get(url, { headers: { 'User-Agent': 'MacSoundboard-App' } }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         return downloadFileFromUrl(res.headers.location, destPath).then(resolve).catch(reject);
@@ -100,6 +111,34 @@ function getAssetsDir() {
   const base = path.join(__dirname, 'assets');
   const unpacked = base.replace('app.asar', 'app.asar.unpacked');
   return fs.existsSync(unpacked) ? unpacked : base;
+}
+
+// Ensure audio file is accessible on real filesystem for macOS /usr/bin/afplay
+function ensureUnpackedFile(filePath) {
+  if (!filePath || typeof filePath !== 'string') return filePath;
+  // If path is inside an asar archive, afplay cannot read it directly.
+  if (filePath.includes('.asar/') || filePath.includes('.asar\\') || filePath.includes('.asar')) {
+    try {
+      const unpackedCandidate = filePath.replace(/app\.asar([/\\])/, 'app.asar.unpacked$1');
+      if (fs.existsSync(unpackedCandidate)) {
+        return unpackedCandidate;
+      }
+      const cacheDir = path.join(USER_DATA_PATH, 'asar_extracted');
+      if (!fs.existsSync(cacheDir)) {
+        fs.mkdirSync(cacheDir, { recursive: true });
+      }
+      const hashName = crypto.createHash('md5').update(filePath).digest('hex').slice(0, 10) + '_' + path.basename(filePath);
+      const cachedDest = path.join(cacheDir, hashName);
+      if (!fs.existsSync(cachedDest) || fs.statSync(cachedDest).size === 0) {
+        const data = fs.readFileSync(filePath);
+        fs.writeFileSync(cachedDest, data);
+      }
+      return cachedDest;
+    } catch (err) {
+      console.error('Failed to unpack file from asar:', err);
+    }
+  }
+  return filePath;
 }
 
 // Default sounds packaged with the app
@@ -244,12 +283,25 @@ function playSoundNative(soundId, customFilePath = null) {
     const config = loadConfig();
     const sound = config.sounds.find(s => s.id === soundId);
     if (!sound) {
-      console.error(`Sound not found for id: ${soundId}`);
-      return false;
+      // Fallback: check if soundId is a preset ID
+      const presets = getLocalPresets();
+      const presetMatch = presets.find(p => p.id === soundId || p.filename === soundId);
+      if (presetMatch && presetMatch.path) {
+        targetPath = presetMatch.path;
+        soundVol = 0.85;
+      } else {
+        console.error(`Sound not found for id: ${soundId}`);
+        return false;
+      }
+    } else {
+      targetPath = sound.path;
+      soundVol = sound.volume !== undefined ? sound.volume : 0.85;
     }
-    targetPath = sound.path;
-    soundVol = sound.volume !== undefined ? sound.volume : 0.85;
   }
+
+  if (!targetPath) return false;
+
+  targetPath = path.resolve(__dirname, ensureUnpackedFile(targetPath));
 
   if (!fs.existsSync(targetPath)) {
     console.error(`Audio file missing at path: ${targetPath}`);
@@ -266,19 +318,26 @@ function playSoundNative(soundId, customFilePath = null) {
     const proc = spawn('/usr/bin/afplay', ['-v', String(finalVol), targetPath]);
     activeAudioProcesses.add(proc);
 
+    proc.stderr.on('data', (data) => {
+      console.error(`afplay error for ${soundId}:`, data.toString());
+    });
+
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('sound-status', { soundId, status: 'playing' });
     }
 
-    proc.on('exit', () => {
+    proc.on('exit', (code) => {
       activeAudioProcesses.delete(proc);
+      if (code !== 0 && code !== null) {
+        console.warn(`afplay process exited with code ${code} for ${soundId}`);
+      }
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('sound-status', { soundId, status: 'ended' });
       }
     });
 
     proc.on('error', (err) => {
-      console.error('afplay error:', err);
+      console.error('afplay spawn error:', err);
       activeAudioProcesses.delete(proc);
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('sound-status', { soundId, status: 'ended' });
@@ -424,15 +483,18 @@ function createTray() {
 }
 
 app.whenReady().then(() => {
-  protocol.handle('soundboard-audio', async (request) => {
+  protocol.handle('soundboard-audio', (request) => {
     try {
       const url = new URL(request.url);
       let filePath = decodeURIComponent(url.pathname);
       if (process.platform === 'win32' && filePath.startsWith('/')) {
         filePath = filePath.substring(1);
       }
-      const data = await fs.promises.readFile(filePath);
-      return new Response(data);
+      const unpacked = ensureUnpackedFile(filePath);
+      if (fs.existsSync(unpacked)) {
+        return net.fetch(pathToFileURL(unpacked).toString());
+      }
+      return new Response('Audio not found', { status: 404 });
     } catch (err) {
       return new Response('Audio not found', { status: 404 });
     }
@@ -479,24 +541,118 @@ ipcMain.handle('play-sound', (_event, soundId) => {
   return playSoundNative(soundId);
 });
 
-ipcMain.handle('preview-sound', async (_event, soundPathOrUrl) => {
-  if (!soundPathOrUrl) return false;
-  if (fs.existsSync(soundPathOrUrl)) {
-    return playSoundNative('preview', soundPathOrUrl);
-  }
-  if (soundPathOrUrl.startsWith('http://') || soundPathOrUrl.startsWith('https://')) {
+async function resolveAudioTarget(target) {
+  if (!target) return { path: null, id: 'preview', url: null };
+
+  let resolvedPath = null;
+  let finalSoundId = 'preview';
+  let remoteUrl = null;
+
+  // 1. If HTTP URL
+  if (typeof target === 'string' && (target.startsWith('http://') || target.startsWith('https://'))) {
+    remoteUrl = target;
     try {
-      const filename = path.basename(new URL(soundPathOrUrl).pathname) || 'temp.wav';
+      const filename = path.basename(new URL(target).pathname) || 'preview.wav';
+      const tempPreviewPath = path.join(USER_DATA_PATH, 'temp_preview_' + filename);
+      if (fs.existsSync(tempPreviewPath)) {
+        resolvedPath = tempPreviewPath;
+      }
+    } catch (_) {}
+    return { path: resolvedPath, id: finalSoundId, url: remoteUrl };
+  }
+
+  // 2. If it is a preset ID, filename, or matches an entry in the preset catalog
+  const presetId = typeof target === 'object' ? (target.presetId || target.id) : target;
+  const catalog = await getCombinedCatalog();
+  const preset = catalog.find(p => p.id === presetId || p.filename === presetId || p.name === presetId || p.path === presetId);
+  if (preset) {
+    finalSoundId = preset.id;
+    const candidates = [
+      preset.path,
+      path.join(getAssetsDir(), 'sounds', 'presets', preset.filename),
+      path.join(__dirname, 'assets', 'sounds', 'presets', preset.filename),
+      path.join(USER_DATA_PATH, 'temp_preview_' + preset.filename)
+    ].filter(Boolean);
+
+    for (const cand of candidates) {
+      const absCand = path.resolve(__dirname, cand);
+      if (fs.existsSync(absCand)) {
+        resolvedPath = absCand;
+        break;
+      }
+    }
+
+    if (!resolvedPath) {
+      const config = loadConfig();
+      const repo = config.cloudRepo || 'ajaychawla07/mac-soundboard';
+      remoteUrl = preset.audioUrl || `https://raw.githubusercontent.com/${repo}/main/assets/sounds/presets/${encodeURIComponent(preset.filename)}`;
+    }
+  }
+
+  // 3. If direct local path on disk
+  if (!resolvedPath && typeof target === 'string') {
+    const absTarget = path.resolve(__dirname, target);
+    if (fs.existsSync(absTarget)) {
+      resolvedPath = absTarget;
+    }
+  }
+
+  return { path: resolvedPath, id: finalSoundId, url: remoteUrl };
+}
+
+ipcMain.handle('get-sound-data-url', async (_event, target) => {
+  try {
+    const { path: resolvedPath, id, url } = await resolveAudioTarget(target);
+    if (resolvedPath) {
+      const finalAbsPath = path.resolve(__dirname, ensureUnpackedFile(resolvedPath));
+      if (fs.existsSync(finalAbsPath)) {
+        const ext = path.extname(finalAbsPath).toLowerCase();
+        let mime = 'audio/wav';
+        if (ext === '.mp3') mime = 'audio/mpeg';
+        else if (ext === '.ogg') mime = 'audio/ogg';
+        else if (ext === '.m4a') mime = 'audio/mp4';
+        else if (ext === '.aac') mime = 'audio/aac';
+
+        const buf = await fs.promises.readFile(finalAbsPath);
+        const dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
+        return { success: true, dataUrl, soundId: id };
+      }
+    }
+    if (url) {
+      return { success: true, audioUrl: url, soundId: id };
+    }
+    return { success: false, error: 'Audio file not found' };
+  } catch (err) {
+    console.error('get-sound-data-url error:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('preview-sound', async (_event, target) => {
+  if (!target) return false;
+
+  let { path: resolvedPath, id, url } = await resolveAudioTarget(target);
+
+  if (!resolvedPath && url) {
+    try {
+      const filename = path.basename(new URL(url).pathname) || 'preview.wav';
       const tempPreviewPath = path.join(USER_DATA_PATH, 'temp_preview_' + filename);
       if (!fs.existsSync(tempPreviewPath)) {
-        await downloadFileFromUrl(soundPathOrUrl, tempPreviewPath);
+        await downloadFileFromUrl(url, tempPreviewPath);
       }
-      return playSoundNative('preview', tempPreviewPath);
+      resolvedPath = tempPreviewPath;
     } catch (err) {
-      console.error('Failed to download preview sound:', err);
+      console.error('Failed to download preview sound from URL:', err);
       return false;
     }
   }
+
+  if (resolvedPath) {
+    const finalAbsPath = path.resolve(__dirname, ensureUnpackedFile(resolvedPath));
+    return playSoundNative(id, finalAbsPath);
+  }
+
+  console.error('Could not resolve preview sound for target:', target);
   return false;
 });
 
@@ -590,9 +746,19 @@ ipcMain.handle('download-sound', async (_event, soundId) => {
   const safeTitle = sound.name.replace(/[^a-zA-Z0-9_\- ]/g, '');
   const defaultFilename = `${safeTitle}${ext}`;
 
+  const soundsDir = path.join(app.getPath('downloads'), 'sounds');
+  if (!fs.existsSync(soundsDir)) {
+    try {
+      fs.mkdirSync(soundsDir, { recursive: true });
+    } catch (e) {
+      console.error('Error creating sounds folder in Downloads:', e);
+    }
+  }
+  const defaultFolder = fs.existsSync(soundsDir) ? soundsDir : app.getPath('downloads');
+
   const saveRes = await dialog.showSaveDialog(mainWindow, {
     title: `Download Sound: ${sound.name}`,
-    defaultPath: path.join(app.getPath('downloads'), defaultFilename),
+    defaultPath: path.join(defaultFolder, defaultFilename),
     filters: [{ name: 'Audio File', extensions: [ext.replace('.', '')] }]
   });
 
@@ -611,13 +777,28 @@ ipcMain.handle('download-sound', async (_event, soundId) => {
 const CLOUD_CACHE_FILE = path.join(USER_DATA_PATH, 'cached_cloud_presets.json');
 
 function getLocalPresets() {
-  const catalogPath = path.join(getAssetsDir(), 'sounds', 'presets', 'catalog.json');
-  if (fs.existsSync(catalogPath)) {
+  const catalogCandidates = [
+    path.join(getAssetsDir(), 'sounds', 'presets', 'catalog.json'),
+    path.join(__dirname, 'assets', 'sounds', 'presets', 'catalog.json')
+  ];
+  let catalogPath = null;
+  for (const c of catalogCandidates) {
+    if (fs.existsSync(c)) {
+      catalogPath = c;
+      break;
+    }
+  }
+
+  if (catalogPath) {
     try {
       const data = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+      const config = loadConfig();
+      const repo = config.cloudRepo || 'ajaychawla07/mac-soundboard';
+      const presetsDir = path.dirname(catalogPath);
       return data.map(p => ({
         ...p,
-        path: path.join(getAssetsDir(), 'sounds', 'presets', p.filename),
+        path: path.join(presetsDir, p.filename),
+        audioUrl: `https://raw.githubusercontent.com/${repo}/main/assets/sounds/presets/${encodeURIComponent(p.filename)}`,
         isLocal: true
       }));
     } catch (e) {
@@ -657,8 +838,8 @@ async function syncRemotePresets(force = false) {
           ...item,
           isLocal: isLocallyBundled && fs.existsSync(localPath),
           isRemote: !isLocallyBundled,
-          audioUrl: `https://raw.githubusercontent.com/${repo}/main/assets/sounds/presets/${item.filename}`,
-          path: isLocallyBundled ? localPath : null
+          audioUrl: `https://raw.githubusercontent.com/${repo}/main/assets/sounds/presets/${encodeURIComponent(item.filename)}`,
+          path: (isLocallyBundled && fs.existsSync(localPath)) ? localPath : null
         };
       });
 
@@ -709,56 +890,82 @@ ipcMain.handle('sync-cloud-presets', async () => {
   return { ...res, catalog: combined };
 });
 
-// Install preset to soundboard (handles both local and cloud-downloaded audio)
+// Install preset to soundboard (handles local, unpacked asar, and cloud audio)
 ipcMain.handle('install-preset', async (_event, { presetId, shortcut }) => {
-  const catalog = await getCombinedCatalog();
-  const item = catalog.find(p => p.id === presetId);
-  if (!item) return null;
+  try {
+    const catalog = await getCombinedCatalog();
+    const item = catalog.find(p => p.id === presetId);
+    if (!item) {
+      return { success: false, error: 'Preset not found in catalog' };
+    }
 
-  const ext = path.extname(item.filename) || '.wav';
-  const destPath = path.join(USER_SOUNDS_DIR, `${Date.now()}_${item.filename}`);
+    if (!fs.existsSync(USER_SOUNDS_DIR)) {
+      fs.mkdirSync(USER_SOUNDS_DIR, { recursive: true });
+    }
 
-  // 1. If available locally on disk
-  if (item.path && fs.existsSync(item.path)) {
-    fs.copyFileSync(item.path, destPath);
-  } else if (item.audioUrl) {
-    // 2. Download from GitHub raw URL (Strategy 1 cloud sound addition)
-    try {
-      await downloadFileFromUrl(item.audioUrl, destPath);
-    } catch (err) {
-      console.error('Failed to download cloud audio:', err);
-      // Fallback to local assets if exists
-      const fallbackLocal = path.join(getAssetsDir(), 'sounds', 'presets', item.filename);
-      if (fs.existsSync(fallbackLocal)) {
-        fs.copyFileSync(fallbackLocal, destPath);
-      } else {
-        return null;
+    const ext = path.extname(item.filename) || '.wav';
+    const destPath = path.join(USER_SOUNDS_DIR, `${Date.now()}_${item.filename}`);
+
+    let copied = false;
+
+    // Check potential local paths
+    const localCandidates = [
+      item.path,
+      path.join(getAssetsDir(), 'sounds', 'presets', item.filename),
+      path.join(__dirname, 'assets', 'sounds', 'presets', item.filename),
+      path.join(USER_DATA_PATH, 'temp_preview_' + item.filename)
+    ].filter(Boolean);
+
+    for (const cand of localCandidates) {
+      if (fs.existsSync(cand)) {
+        try {
+          const fileData = fs.readFileSync(cand);
+          fs.writeFileSync(destPath, fileData);
+          copied = true;
+          break;
+        } catch (copyErr) {
+          console.error('Error copying local preset file:', cand, copyErr);
+        }
       }
     }
-  } else {
-    const fallbackLocal = path.join(getAssetsDir(), 'sounds', 'presets', item.filename);
-    if (fs.existsSync(fallbackLocal)) {
-      fs.copyFileSync(fallbackLocal, destPath);
-    } else {
-      return null;
+
+    // Fallback: download from cloud
+    if (!copied) {
+      const config = loadConfig();
+      const repo = config.cloudRepo || 'ajaychawla07/mac-soundboard';
+      const audioUrl = item.audioUrl || `https://raw.githubusercontent.com/${repo}/main/assets/sounds/presets/${encodeURIComponent(item.filename)}`;
+      try {
+        await downloadFileFromUrl(audioUrl, destPath);
+        copied = true;
+      } catch (err) {
+        console.error('Failed to download cloud audio:', err);
+        return { success: false, error: `Failed to download audio: ${err.message}` };
+      }
     }
+
+    if (!copied || !fs.existsSync(destPath)) {
+      return { success: false, error: 'Could not obtain audio file for preset' };
+    }
+
+    const newSound = {
+      id: 'sound_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      name: item.name,
+      category: item.category,
+      path: destPath,
+      shortcut: shortcut || '',
+      volume: 0.85,
+      color: item.color
+    };
+
+    const config = loadConfig();
+    config.sounds.push(newSound);
+    saveConfig(config);
+    registerGlobalShortcuts(config);
+    return { success: true, sound: newSound };
+  } catch (err) {
+    console.error('install-preset fatal error:', err);
+    return { success: false, error: err.message };
   }
-
-  const newSound = {
-    id: 'sound_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-    name: item.name,
-    category: item.category,
-    path: destPath,
-    shortcut: shortcut || '',
-    volume: 0.85,
-    color: item.color
-  };
-
-  const config = loadConfig();
-  config.sounds.push(newSound);
-  saveConfig(config);
-  registerGlobalShortcuts(config);
-  return newSound;
 });
 
 // EXPORT SOUNDBOARD PACK (.soundboard)

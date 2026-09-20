@@ -31,7 +31,7 @@ A fast, lightweight, and modern soundboard app for macOS with tactile instant bu
   - All sounds, audio files, and hotkeys are immediately installed and ready to play!
 
 ### 5. 📥 One-Click Audio Download
-- Every sound card has a **Download (📥)** button to export the audio file directly to your Downloads folder or save anywhere on your Mac.
+- Every sound card has a **Download (📥)** button to export the audio file directly to your `Downloads/sounds` folder or save anywhere on your Mac.
 
 ### 6. ⚡ Global Keyboard Shortcuts & Background Mode
 - Triggers sounds from any game or app in the background.
