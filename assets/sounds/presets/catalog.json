@@ -145,5 +145,12 @@
     "category": "Games",
     "filename": "tf-nemesis.mp3",
     "color": "#6366f1"
+  },
+  {
+    "id": "preset_mlg_airhorn",
+    "name": "Mlg Airhorn",
+    "category": "Memes",
+    "filename": "mlg-airhorn.mp3",
+    "color": "#8b5cf6"
   }
 ]
