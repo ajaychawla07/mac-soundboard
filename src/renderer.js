@@ -13,6 +13,7 @@ let currentView = 'my-sounds'; // 'my-sounds' | 'discover'
 const playingCards = new Map(); // soundId -> count
 let isMuted = false;
 let previousVolume = 1.0;
+let allowOverlap = true; // true = sounds can overlap; false = new sound stops the previous
 
 // DOM Elements
 const viewMySounds = document.getElementById('view-my-sounds');
@@ -36,6 +37,8 @@ const btnExportPack = document.getElementById('btn-export-pack');
 const btnImportPack = document.getElementById('btn-import-pack');
 const dropOverlay = document.getElementById('drop-overlay');
 const toastEl = document.getElementById('toast');
+const btnOverlapToggle = document.getElementById('btn-overlap-toggle');
+const overlapLabel = document.getElementById('overlap-label');
 
 // Cloud Sync & Settings Elements
 const btnSyncCloud = document.getElementById('btn-sync-cloud');
@@ -126,8 +129,13 @@ async function playPresetPreview(preset) {
     return;
   }
 
-  // Stop any other currently running preview
-  stopCurrentPreview();
+  // Stop other sounds when overlap is disabled
+  if (!allowOverlap) {
+    await stopAllSounds();
+  } else {
+    // Just stop the current preview (always single-preview)
+    stopCurrentPreview();
+  }
 
   // 1. Try to obtain dataUrl or audioUrl via IPC
   let audioSrc = null;
@@ -199,6 +207,9 @@ async function playPresetPreview(preset) {
 
 // Play sound by ID via native macOS CoreAudio engine
 async function playSound(soundId) {
+  if (!allowOverlap) {
+    await stopAllSounds();
+  }
   await window.soundboard.playSound(soundId);
 }
 
@@ -885,6 +896,27 @@ function updateVolumeIcon() {
 // Stop All Panic Button
 btnPanic.addEventListener('click', stopAllSounds);
 
+// Overlap Toggle
+function updateOverlapUI() {
+  if (allowOverlap) {
+    btnOverlapToggle.classList.add('is-active');
+    overlapLabel.textContent = 'Overlap';
+    btnOverlapToggle.title = 'Overlap ON — sounds play simultaneously. Click to play one at a time.';
+  } else {
+    btnOverlapToggle.classList.remove('is-active');
+    overlapLabel.textContent = 'Single';
+    btnOverlapToggle.title = 'Single mode — new sound stops the previous. Click to allow overlap.';
+  }
+}
+
+btnOverlapToggle.addEventListener('click', () => {
+  allowOverlap = !allowOverlap;
+  appConfig.allowOverlap = allowOverlap;
+  updateOverlapUI();
+  saveConfigDebounced();
+  showToast(allowOverlap ? 'Overlap ON — sounds play simultaneously 🔊' : 'Single mode — one sound at a time 🔇');
+});
+
 // Minimize to Menu Bar / Tray
 btnMinimizeTray.addEventListener('click', () => {
   window.soundboard.hideToTray();
@@ -1085,6 +1117,10 @@ async function initApp() {
   if (appConfig.panicShortcut) {
     document.getElementById('panic-shortcut-badge').textContent = formatShortcutForDisplay(appConfig.panicShortcut);
   }
+
+  // Load overlap preference (default: true = overlap allowed)
+  allowOverlap = appConfig.allowOverlap !== undefined ? appConfig.allowOverlap : true;
+  updateOverlapUI();
 
   renderSounds();
 }

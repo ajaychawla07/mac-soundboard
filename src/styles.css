@@ -630,6 +630,37 @@ body {
   font-size: 10px;
 }
 
+/* Overlap Toggle Button */
+.btn-overlap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-overlap:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+}
+
+.btn-overlap.is-active {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: rgba(99, 102, 241, 0.45);
+  color: #a5b4fc;
+}
+
+.btn-overlap.is-active:hover {
+  background: rgba(99, 102, 241, 0.28);
+}
+
 .btn-icon {
   display: inline-flex;
   align-items: center;
