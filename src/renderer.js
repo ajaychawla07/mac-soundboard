@@ -37,6 +37,16 @@ const btnImportPack = document.getElementById('btn-import-pack');
 const dropOverlay = document.getElementById('drop-overlay');
 const toastEl = document.getElementById('toast');
 
+// Cloud Sync & Settings Elements
+const btnSyncCloud = document.getElementById('btn-sync-cloud');
+const syncBtnText = document.getElementById('sync-btn-text');
+const btnOpenSettings = document.getElementById('btn-open-settings');
+const settingsModal = document.getElementById('settings-modal');
+const settingsModalClose = document.getElementById('settings-modal-close');
+const settingsRepoInput = document.getElementById('settings-repo-input');
+const settingsSyncNowBtn = document.getElementById('settings-sync-now-btn');
+const settingsSaveBtn = document.getElementById('settings-save-btn');
+
 // Upload Modal Elements
 const btnOpenUpload = document.getElementById('btn-open-upload');
 const uploadModal = document.getElementById('upload-modal');
@@ -225,10 +235,12 @@ function renderPresets() {
     const isPlaying = (playingCards.get(preset.id) || 0) > 0;
     const color = preset.color || '#ef4444';
     const isAlreadyInstalled = appConfig.sounds.some(s => s.name.toLowerCase() === preset.name.toLowerCase());
+    const previewSrc = preset.path || preset.audioUrl;
+    const isRemote = preset.isRemote;
 
     return `
       <div class="preset-card ${isPlaying ? 'is-playing' : ''}" data-id="${preset.id}" style="--btn-color: ${color}">
-        <div class="instant-button-wrap" data-action="preview-preset" data-id="${preset.id}" data-path="${preset.path}" title="Click to Preview">
+        <div class="instant-button-wrap" data-action="preview-preset" data-id="${preset.id}" data-path="${escapeHtml(previewSrc)}" title="Click to Preview">
           <div class="instant-button-3d">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -244,7 +256,10 @@ function renderPresets() {
 
         <div class="preset-card-meta">
           <span class="preset-title">${escapeHtml(preset.name)}</span>
-          <span class="preset-category">${escapeHtml(preset.category)}</span>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 5px; margin-top: 2px;">
+            <span class="preset-category">${escapeHtml(preset.category)}</span>
+            ${isRemote ? '<span class="badge-bg" style="font-size: 8.5px; padding: 1px 5px; color: #38bdf8; border-color: rgba(56,189,248,0.3); background: rgba(56,189,248,0.15);">Cloud</span>' : ''}
+          </div>
         </div>
 
         <button class="btn-add-preset" data-action="install-preset" data-id="${preset.id}" ${isAlreadyInstalled ? 'disabled' : ''}>
@@ -838,6 +853,83 @@ window.soundboard.onStopAll(() => {
   document.querySelectorAll('.sound-card.is-playing, .preset-card.is-playing').forEach(el => {
     el.classList.remove('is-playing');
   });
+});
+
+// Cloud Presets Sync (Strategy 1: Audio Updates)
+async function triggerCloudSync() {
+  if (btnSyncCloud) {
+    btnSyncCloud.classList.add('is-syncing');
+    if (syncBtnText) syncBtnText.textContent = 'Checking...';
+  }
+  try {
+    const res = await window.soundboard.syncCloudPresets();
+    if (res && res.success) {
+      if (res.catalog) presetsCatalog = res.catalog;
+      renderPresets();
+      showToast(`Cloud Sync: ${presetsCatalog.length} presets up to date! ☁️`);
+    } else {
+      showToast('Checked cloud: up to date with local presets');
+    }
+  } catch (e) {
+    showToast('Could not reach GitHub for updates');
+  } finally {
+    if (btnSyncCloud) {
+      btnSyncCloud.classList.remove('is-syncing');
+      if (syncBtnText) syncBtnText.textContent = 'Check for New Sounds';
+    }
+  }
+}
+
+if (btnSyncCloud) {
+  btnSyncCloud.addEventListener('click', triggerCloudSync);
+}
+
+// Settings Modal Handlers
+if (btnOpenSettings) {
+  btnOpenSettings.addEventListener('click', () => {
+    if (appConfig.cloudRepo && settingsRepoInput) {
+      settingsRepoInput.value = appConfig.cloudRepo;
+    }
+    settingsModal.classList.remove('hidden');
+  });
+}
+
+if (settingsModalClose) {
+  settingsModalClose.addEventListener('click', () => {
+    settingsModal.classList.add('hidden');
+  });
+}
+
+if (settingsSaveBtn) {
+  settingsSaveBtn.addEventListener('click', async () => {
+    const repo = settingsRepoInput.value.trim();
+    if (repo) {
+      appConfig.cloudRepo = repo;
+      await window.soundboard.saveConfig(appConfig);
+      showToast(`Saved publisher repo: ${repo}`);
+    }
+    settingsModal.classList.add('hidden');
+  });
+}
+
+if (settingsSyncNowBtn) {
+  settingsSyncNowBtn.addEventListener('click', async () => {
+    const repo = settingsRepoInput.value.trim();
+    if (repo) {
+      appConfig.cloudRepo = repo;
+      await window.soundboard.saveConfig(appConfig);
+    }
+    await triggerCloudSync();
+  });
+}
+
+window.soundboard.onCloudSyncStatus((status) => {
+  if (status && status.success) {
+    window.soundboard.getPresetsCatalog().then(cat => {
+      presetsCatalog = cat;
+      if (currentView === 'discover') renderPresets();
+    });
+  }
 });
 
 // App Initialization

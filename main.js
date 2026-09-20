@@ -2,10 +2,71 @@ const { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, dialog, protoco
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const https = require('https');
 const { spawn, execFile } = require('child_process');
 
 // Allow audio autoplay without user gesture requirements in background
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
+// Cloud Presets Sync Helpers (Strategy 1: Audio Updates via GitHub)
+function fetchJsonFromUrl(url) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'MacSoundboard-App' } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return fetchJsonFromUrl(res.headers.location).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) {
+        return reject(new Error(`HTTP ${res.statusCode}`));
+      }
+      let raw = '';
+      res.on('data', chunk => raw += chunk);
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(raw));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(8000, () => {
+      req.destroy();
+      reject(new Error('Request timed out'));
+    });
+  });
+}
+
+function downloadFileFromUrl(url, destPath) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'MacSoundboard-App' } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return downloadFileFromUrl(res.headers.location, destPath).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) {
+        return reject(new Error(`HTTP ${res.statusCode}`));
+      }
+      const fileStream = fs.createWriteStream(destPath);
+      res.pipe(fileStream);
+      fileStream.on('finish', () => {
+        fileStream.close();
+        resolve(destPath);
+      });
+      fileStream.on('error', (err) => {
+        fs.unlink(destPath, () => {});
+        reject(err);
+      });
+    });
+    req.on('error', (err) => {
+      fs.unlink(destPath, () => {});
+      reject(err);
+    });
+    req.setTimeout(15000, () => {
+      req.destroy();
+      fs.unlink(destPath, () => {});
+      reject(new Error('Download timed out'));
+    });
+  });
+}
 
 // Register custom protocol scheme before app is ready
 protocol.registerSchemesAsPrivileged([
@@ -418,8 +479,25 @@ ipcMain.handle('play-sound', (_event, soundId) => {
   return playSoundNative(soundId);
 });
 
-ipcMain.handle('preview-sound', (_event, soundPath) => {
-  return playSoundNative('preview', soundPath);
+ipcMain.handle('preview-sound', async (_event, soundPathOrUrl) => {
+  if (!soundPathOrUrl) return false;
+  if (fs.existsSync(soundPathOrUrl)) {
+    return playSoundNative('preview', soundPathOrUrl);
+  }
+  if (soundPathOrUrl.startsWith('http://') || soundPathOrUrl.startsWith('https://')) {
+    try {
+      const filename = path.basename(new URL(soundPathOrUrl).pathname) || 'temp.wav';
+      const tempPreviewPath = path.join(USER_DATA_PATH, 'temp_preview_' + filename);
+      if (!fs.existsSync(tempPreviewPath)) {
+        await downloadFileFromUrl(soundPathOrUrl, tempPreviewPath);
+      }
+      return playSoundNative('preview', tempPreviewPath);
+    } catch (err) {
+      console.error('Failed to download preview sound:', err);
+      return false;
+    }
+  }
+  return false;
 });
 
 ipcMain.handle('stop-all-sounds', () => {
@@ -530,35 +608,141 @@ ipcMain.handle('download-sound', async (_event, soundId) => {
   }
 });
 
-// Discover / Preset Library Catalog
-ipcMain.handle('get-presets-catalog', async () => {
+const CLOUD_CACHE_FILE = path.join(USER_DATA_PATH, 'cached_cloud_presets.json');
+
+function getLocalPresets() {
   const catalogPath = path.join(getAssetsDir(), 'sounds', 'presets', 'catalog.json');
   if (fs.existsSync(catalogPath)) {
     try {
       const data = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
-      // Attach absolute paths
       return data.map(p => ({
         ...p,
-        path: path.join(getAssetsDir(), 'sounds', 'presets', p.filename)
+        path: path.join(getAssetsDir(), 'sounds', 'presets', p.filename),
+        isLocal: true
       }));
     } catch (e) {
-      console.error('Error reading presets catalog:', e);
+      console.error('Error reading local presets catalog:', e);
     }
   }
   return [];
+}
+
+function getCachedCloudPresets() {
+  if (fs.existsSync(CLOUD_CACHE_FILE)) {
+    try {
+      return JSON.parse(fs.readFileSync(CLOUD_CACHE_FILE, 'utf8'));
+    } catch (e) {
+      // ignore
+    }
+  }
+  return [];
+}
+
+async function syncRemotePresets(force = false) {
+  const config = loadConfig();
+  const repo = config.cloudRepo || 'ajaychawla07/mac-soundboard';
+  const remoteUrl = `https://raw.githubusercontent.com/${repo}/main/assets/sounds/presets/catalog.json`;
+
+  try {
+    const remoteList = await fetchJsonFromUrl(remoteUrl);
+    if (Array.isArray(remoteList)) {
+      const localPresets = getLocalPresets();
+      const localIds = new Set(localPresets.map(p => p.id));
+      const localFiles = new Set(localPresets.map(p => p.filename));
+
+      const processedRemote = remoteList.map(item => {
+        const isLocallyBundled = localIds.has(item.id) || localFiles.has(item.filename);
+        const localPath = path.join(getAssetsDir(), 'sounds', 'presets', item.filename);
+        return {
+          ...item,
+          isLocal: isLocallyBundled && fs.existsSync(localPath),
+          isRemote: !isLocallyBundled,
+          audioUrl: `https://raw.githubusercontent.com/${repo}/main/assets/sounds/presets/${item.filename}`,
+          path: isLocallyBundled ? localPath : null
+        };
+      });
+
+      fs.writeFileSync(CLOUD_CACHE_FILE, JSON.stringify(processedRemote, null, 2), 'utf8');
+      return { success: true, count: processedRemote.length, remoteCount: remoteList.length };
+    }
+  } catch (err) {
+    // Offline or repo not public yet - gracefully silent
+    return { success: false, error: err.message };
+  }
+  return { success: false };
+}
+
+async function getCombinedCatalog() {
+  const localList = getLocalPresets();
+  const cachedRemote = getCachedCloudPresets();
+  const combinedMap = new Map();
+
+  for (const item of localList) {
+    combinedMap.set(item.id, item);
+  }
+  for (const item of cachedRemote) {
+    if (!combinedMap.has(item.id)) {
+      combinedMap.set(item.id, item);
+    }
+  }
+  return Array.from(combinedMap.values());
+}
+
+// Discover / Preset Library Catalog
+ipcMain.handle('get-presets-catalog', async () => {
+  const combined = await getCombinedCatalog();
+
+  // Background non-blocking check for new sounds
+  syncRemotePresets().then(res => {
+    if (res.success && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('cloud-sync-status', res);
+    }
+  }).catch(() => {});
+
+  return combined;
 });
 
-// Install preset to soundboard
+// Sync cloud presets on user request
+ipcMain.handle('sync-cloud-presets', async () => {
+  const res = await syncRemotePresets(true);
+  const combined = await getCombinedCatalog();
+  return { ...res, catalog: combined };
+});
+
+// Install preset to soundboard (handles both local and cloud-downloaded audio)
 ipcMain.handle('install-preset', async (_event, { presetId, shortcut }) => {
-  const catalogPath = path.join(getAssetsDir(), 'sounds', 'presets', 'catalog.json');
-  if (!fs.existsSync(catalogPath)) return null;
-  const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+  const catalog = await getCombinedCatalog();
   const item = catalog.find(p => p.id === presetId);
   if (!item) return null;
 
-  const srcPath = path.join(getAssetsDir(), 'sounds', 'presets', item.filename);
+  const ext = path.extname(item.filename) || '.wav';
   const destPath = path.join(USER_SOUNDS_DIR, `${Date.now()}_${item.filename}`);
-  fs.copyFileSync(srcPath, destPath);
+
+  // 1. If available locally on disk
+  if (item.path && fs.existsSync(item.path)) {
+    fs.copyFileSync(item.path, destPath);
+  } else if (item.audioUrl) {
+    // 2. Download from GitHub raw URL (Strategy 1 cloud sound addition)
+    try {
+      await downloadFileFromUrl(item.audioUrl, destPath);
+    } catch (err) {
+      console.error('Failed to download cloud audio:', err);
+      // Fallback to local assets if exists
+      const fallbackLocal = path.join(getAssetsDir(), 'sounds', 'presets', item.filename);
+      if (fs.existsSync(fallbackLocal)) {
+        fs.copyFileSync(fallbackLocal, destPath);
+      } else {
+        return null;
+      }
+    }
+  } else {
+    const fallbackLocal = path.join(getAssetsDir(), 'sounds', 'presets', item.filename);
+    if (fs.existsSync(fallbackLocal)) {
+      fs.copyFileSync(fallbackLocal, destPath);
+    } else {
+      return null;
+    }
+  }
 
   const newSound = {
     id: 'sound_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),

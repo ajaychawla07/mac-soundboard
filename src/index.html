@@ -77,6 +77,12 @@
           </svg>
           <span>Hide</span>
         </button>
+        <button id="btn-open-settings" class="btn-icon" title="Publisher & Cloud Updates">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -148,8 +154,18 @@
     <!-- VIEW 2: Discover Library View -->
     <main id="view-discover" class="soundboard-scroll-area hidden">
       <div class="discover-banner">
-        <h2>🔥 MyInstants Preset Library</h2>
-        <p>Browse iconic meme and sound effect buttons. Listen to the preview and click <strong>"+ Add"</strong> to install it directly to your soundboard with a shortcut!</p>
+        <div class="discover-banner-text">
+          <h2>🔥 MyInstants Preset Library</h2>
+          <p>Browse iconic meme and sound effect buttons. Click <strong>"+ Add"</strong> to install them to your soundboard with a shortcut!</p>
+        </div>
+        <button id="btn-sync-cloud" class="btn-sync" title="Check GitHub for newly published sounds">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          <span id="sync-btn-text">Check for New Sounds</span>
+        </button>
       </div>
       <div id="preset-grid" class="preset-grid">
         <!-- Dynamically populated preset cards -->
@@ -273,6 +289,35 @@
       <div class="modal-footer">
         <button id="modal-clear-btn" class="btn-secondary">Remove Shortcut</button>
         <button id="modal-save-btn" class="btn-primary" disabled>Save Shortcut</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS & PUBLISHER MODAL (Strategy 1: Audio Updates) -->
+  <div id="settings-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Publisher &amp; Cloud Updates</h3>
+        <button id="settings-modal-close" class="btn-close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">GitHub Repository for Sound Updates</label>
+          <input type="text" id="settings-repo-input" class="form-input" placeholder="username/repository" value="ajaychawla07/mac-soundboard" />
+          <p class="modal-tip">The app reads <code>assets/sounds/presets/catalog.json</code> from this repository to discover newly published sounds.</p>
+        </div>
+        <div class="publisher-guide-box">
+          <div class="guide-title">🚀 How to Push Sound Updates to Users:</div>
+          <ol class="guide-steps">
+            <li>Drop audio files into <code>assets/sounds/presets/</code> in your repo.</li>
+            <li>Add their entries to <code>assets/sounds/presets/catalog.json</code>.</li>
+            <li>Run <code>git push</code>. <strong>Done! All users get the new sounds automatically.</strong></li>
+          </ol>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="settings-sync-now-btn" class="btn-secondary">Sync Now</button>
+        <button id="settings-save-btn" class="btn-primary">Save Settings</button>
       </div>
     </div>
   </div>

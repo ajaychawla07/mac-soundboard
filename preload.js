@@ -25,9 +25,15 @@ contextBridge.exposeInMainWorld('soundboard', {
   exportPack: () => ipcRenderer.invoke('export-pack'),
   importPack: (filePath) => ipcRenderer.invoke('import-pack', filePath),
 
-  // Discover & Presets Catalog
+  // Discover & Presets Catalog (Strategy 1: Audio Updates)
   getPresetsCatalog: () => ipcRenderer.invoke('get-presets-catalog'),
   installPreset: (data) => ipcRenderer.invoke('install-preset', data),
+  syncCloudPresets: () => ipcRenderer.invoke('sync-cloud-presets'),
+  onCloudSyncStatus: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('cloud-sync-status', handler);
+    return () => ipcRenderer.removeListener('cloud-sync-status', handler);
+  },
 
   // Events from main process
   onSoundStatus: (callback) => {
