@@ -82,5 +82,68 @@
     "category": "Games",
     "filename": "oof.wav",
     "color": "#f43f5e"
+  },
+  {
+    "id": "preset_indian_song",
+    "name": "Indian Song",
+    "category": "Music",
+    "filename": "indian-song.mp3",
+    "color": "#ef4444"
+  },
+  {
+    "id": "preset_galaxy_meme",
+    "name": "Galaxy Meme",
+    "category": "Memes",
+    "filename": "galaxy-meme.mp3",
+    "color": "#f97316"
+  },
+  {
+    "id": "preset_movie_1",
+    "name": "Movie 1",
+    "category": "Reactions",
+    "filename": "movie-1.mp3",
+    "color": "#f59e0b"
+  },
+  {
+    "id": "preset_tuco_get_out",
+    "name": "Tuco Get Out",
+    "category": "Memes",
+    "filename": "tuco-get-out.mp3",
+    "color": "#eab308"
+  },
+  {
+    "id": "preset_du_bist_gut_genug",
+    "name": "Du Bist Gut Genug",
+    "category": "Memes",
+    "filename": "du-bist-gut-genug.mp3",
+    "color": "#10b981"
+  },
+  {
+    "id": "preset_rizz_sound_effect",
+    "name": "Rizz Sound Effect",
+    "category": "Memes",
+    "filename": "rizz-sound-effect.mp3",
+    "color": "#14b8a6"
+  },
+  {
+    "id": "preset_faaah",
+    "name": "Faaah",
+    "category": "Memes",
+    "filename": "faaah.mp3",
+    "color": "#06b6d4"
+  },
+  {
+    "id": "preset_30_s_left",
+    "name": "30 S Left",
+    "category": "Sound Effects",
+    "filename": "30-s-left.mp3",
+    "color": "#3b82f6"
+  },
+  {
+    "id": "preset_tf_nemesis",
+    "name": "Tf Nemesis",
+    "category": "Games",
+    "filename": "tf-nemesis.mp3",
+    "color": "#6366f1"
   }
 ]
