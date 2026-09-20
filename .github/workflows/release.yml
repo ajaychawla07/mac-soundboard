@@ -26,6 +26,8 @@ jobs:
 
       - name: Build and package macOS distribution
         run: npm run dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

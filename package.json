@@ -8,7 +8,7 @@
     "test": "node test.js",
     "publish-preset": "node scripts/publish-presets.js",
     "build:app": "electron-builder --mac dir",
-    "dist": "electron-builder --mac dmg zip"
+    "dist": "electron-builder --mac dmg zip --publish never"
   },
   "build": {
     "appId": "com.soundboard.mac",
